@@ -35,12 +35,21 @@ int first_day_of_month(int month, int year)
     return tm.tm_wday;                  // 0=Sun, 1=Mon, .....
 }
 
+
+
 int number_of_days(int month){ 
-    int num_days[12] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31}; 
+    int num_days[12] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+
     return num_days[month];
 }
 
 int main(int argc, char *argv[]){
+    
+    if(argc < 3){
+        fprintf(stderr, "Usage: %s argument\n", argv[0]);
+        exit(EXIT_FAILURE);
+    }else{ 
+
     int month = atoi(argv[1]);
     int year = atoi(argv[2]);
     int num_days = 0;
@@ -84,13 +93,13 @@ int main(int argc, char *argv[]){
 
 
     }
-    
-
-
 
 
 
     printf("%d \n", first_day_of_month(month, year));
+    exit(EXIT_SUCCESS);
+        
+    }
 
 
     return 0;
