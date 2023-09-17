@@ -173,23 +173,5 @@ void read_cmdfile(char filename[]){
 
 
 int main(int argc, char *argv[]) {
-    
-    
-
-
-    // Print the parsed commands and system calls
-
-    for (size_t i = 0; i < num_commands; i++) {
-        printf("Command Name: %s\n", commands[i].name);
-        printf("Number of System Calls: %zu\n", commands[i].num_calls);
-
-        for (size_t j = 0; j < commands[i].num_calls; j++) {
-            printf("  Elapsed Time: %uusecs\n", commands[i].calls[j].elapsed_time);
-            printf("  Action: %s\n", commands[i].calls[j].action);
-            printf("  Target: %s\n", commands[i].calls[j].target);
-            printf("  Data Size: %uB\n", commands[i].calls[j].data_size);
-        }
-    }
-
-    return 0;
+    return 0 ;
 }
