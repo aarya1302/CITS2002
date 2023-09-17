@@ -162,13 +162,15 @@ void read_sysconfig(char filename[]){
             }
         }
     }
-   printf("Time Quantum: %ldusec\n", timeQ);
-    for (int i = 0; i < sizeof(devices); i++) {
-        printf("Device %d:\n", i+1);
-        printf("  Name: %s\n", devices[i].devicename);
-        printf("  Read Speed: %lluBps\n", devices[i].readspeed);
-        printf("  Write Speed: %lluBps\n", devices[i].writespeed);
-    }    
+   
+for (int i = 0; i < index; i++) {
+
+    printf("Device Name: %s\n", devices[i].devicename);
+    printf("Read Speed: %lld Bps\n", devices[i].readspeed);
+    printf("Write Speed: %lld Bps\n", devices[i].writespeed);
+    printf("Time quantum: %ldusec", timeQ);
+
+}
 
     // Close the file
     fclose(file);
@@ -247,6 +249,20 @@ void read_cmdfile(char filename[]){
 
         }
     }
+    for (size_t i = 0; i < num_commands; i++) {
+        printf("Command Name: %s\n", commands[i].name);
+
+        printf("Number of System Calls: %zu\n", commands[i].num_calls);
+            for (size_t j = 0; j < commands[i].num_calls; j++) {
+                printf("  Elapsed Time: %uusecs\n", commands[i].calls[j].elapsed_time);
+                printf("  Action: %s\n", commands[i].calls[j].action);
+                printf("  Target: %s\n", commands[i].calls[j].target);
+                printf("  Data Size: %uB\n", commands[i].calls[j].data_size);
+    }
+    }
+
+
+
 
     // Close the file
     fclose(file);
