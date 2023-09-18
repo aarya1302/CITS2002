@@ -1,0 +1,10 @@
+#
+longsleep
+	10usecs    sleep   10usecs
+	20usecs    exit
+#
+#
+shortsleep
+	10usecs    sleep   10usecs
+	20usecs    exit
+#

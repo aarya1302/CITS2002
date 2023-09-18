@@ -9,6 +9,7 @@
 #define STATE_BLOCKED_IO 2
 #define STATE_SLEEPING 3
 #define STATE_BLOCKED_WAIT 4
+#define STATE_DONE 5
 
 #define MAX_COMMANDS 32
 #define MAX_CALLS 32
@@ -30,7 +31,8 @@ struct DeviceInfo {
     long long writespeed;
 };
 
-long timeQ;
+long timeQ; // time quantum global variable
+long num_cmds; // number of commands
 
 // Define a data structure to represent a system call
 struct SystemCall {
@@ -40,14 +42,16 @@ struct SystemCall {
     unsigned int data_size;   // Data size (e.g., 2000B)
     unsigned int sleep; 
     char spawn_command[32];  
-    unsigned int state;// initial state is ready 
+    unsigned int state;
+    unsigned int time_remain;
 };
 
 // Define a data structure to represent a command
 struct Command {
     char name[32];                  // Command name 
     struct SystemCall calls[MAX_CALLS];  // Array of system calls
-    size_t num_calls;               // Number of system calls
+     size_t num_calls; 
+
 };
 /////////////////////////////////////////////////////////////////////////////////
 
@@ -163,14 +167,14 @@ void read_sysconfig(char filename[]){
         }
     }
    
-for (int i = 0; i < index; i++) {
+    for (int i = 0; i < index; i++) {
 
     printf("Device Name: %s\n", devices[i].devicename);
     printf("Read Speed: %lld Bps\n", devices[i].readspeed);
     printf("Write Speed: %lld Bps\n", devices[i].writespeed);
     printf("Time quantum: %ldusec", timeQ);
 
-}
+    }
 
     // Close the file
     fclose(file);
@@ -190,7 +194,7 @@ void read_cmdfile(char filename[]){
 
 
     char line[256];
-;
+
     size_t num_commands = 0;
     size_t current_command_index = 0;
 
@@ -216,6 +220,7 @@ void read_cmdfile(char filename[]){
                 // Handle regular system calls
                 size_t call_index = commands[current_command_index].num_calls++;
                 commands[current_command_index].calls[call_index].elapsed_time = elapsed_time;
+                commands[current_command_index].calls[call_index].time_remain = elapsed_time;
                 strcpy(commands[current_command_index].calls[call_index].action, action);
                 strcpy(commands[current_command_index].calls[call_index].target, target);
                 commands[current_command_index].calls[call_index].data_size = data_size;
@@ -223,23 +228,27 @@ void read_cmdfile(char filename[]){
                 // Handle wait system calls
                 size_t call_index = commands[current_command_index].num_calls++;
                 commands[current_command_index].calls[call_index].elapsed_time = elapsed_time;
+                 commands[current_command_index].calls[call_index].time_remain = elapsed_time;
                 strcpy(commands[current_command_index].calls[call_index].action, action);
                 commands[current_command_index].calls[call_index].sleep = sleep;
             } else if (sscanf(line, "%uusecs %31s %31s", &elapsed_time, action, spawn_command) == 3) {
                 // Handle spawn system calls
                 size_t call_index = commands[current_command_index].num_calls++;
                 commands[current_command_index].calls[call_index].elapsed_time = elapsed_time;
+                 commands[current_command_index].calls[call_index].time_remain = elapsed_time;
                 strcpy(commands[current_command_index].calls[call_index].action, action);
                 strcpy(commands[current_command_index].calls[call_index].spawn_command, spawn_command);
             } else if (sscanf(line, "%uusecs %31s", &elapsed_time, action) == 2) {
                 // Handle system calls with no additional parameters
                 size_t call_index = commands[current_command_index].num_calls++;
                 commands[current_command_index].calls[call_index].elapsed_time = elapsed_time;
+                 commands[current_command_index].calls[call_index].time_remain = elapsed_time;
                 strcpy(commands[current_command_index].calls[call_index].action, action);
             } else if (sscanf(line, "%31s", command_name) == 1) {
                 // Handle command name lines
                 current_command_index = num_commands;
                 num_commands++;
+                num_cmds = (int)num_commands;
 
                 // Store the command name
                 strcpy(commands[current_command_index].name, command_name);
@@ -253,12 +262,12 @@ void read_cmdfile(char filename[]){
         printf("Command Name: %s\n", commands[i].name);
 
         printf("Number of System Calls: %zu\n", commands[i].num_calls);
-            for (size_t j = 0; j < commands[i].num_calls; j++) {
+        for (size_t j = 0; j < commands[i].num_calls; j++) {
                 printf("  Elapsed Time: %uusecs\n", commands[i].calls[j].elapsed_time);
                 printf("  Action: %s\n", commands[i].calls[j].action);
                 printf("  Target: %s\n", commands[i].calls[j].target);
                 printf("  Data Size: %uB\n", commands[i].calls[j].data_size);
-    }
+        }
     }
 
 
@@ -274,17 +283,19 @@ void read_cmdfile(char filename[]){
 int main(int argc, char *argv[]) {
     
 
-    // Initialize CPU clock speed and other system parameters
-    int clockspeed = 200000000;
-    int timequantum = timeQ; 
-    int total_time = 0; 
-    int cpu_time = 0; 
-    float percentageCPU = 0; 
+   
 
 
     //Parsing command file and sys config files 
     read_sysconfig(argv[1]);
     read_cmdfile(argv[2]);
+    
+     // Initialize CPU clock speed and other system parameters
+    int clockspeed = 200000000;
+    int timequantum = timeQ; 
+    int total_time = 0; 
+    int cpu_time = 0; 
+    float percentageCPU = 0; 
 
     // Maintain separate queues for different blocked states
     Queue ioBlockQueue, sleepBlockQueue, waitBlockQueue, readyQueue;
@@ -298,58 +309,113 @@ int main(int argc, char *argv[]) {
     while (processes_running) {
         processes_running = false;
 
-        for(int i = 0; i < sizeof(commands); ++i){
+        for(int i = 0; i < num_cmds; ++i){
 
             struct Command curr_command = commands[i];
+            int time_used = 0; 
+
+            printf("///////////////////////// this is the current command : %s", curr_command.name);
+             int num_calls = commands[i].num_calls;
+            //Enqueueing first  processe for  command into the Ready Queue
+            for(int j = 0; j < num_calls; ++j){ 
 
 
-            //Enqueueing all of the processes for one command into the Ready Queue
-
-            for(int j = 0; j < commands[i].num_calls; ++j){ 
                 struct SystemCall* process = &(curr_command.calls[j]);
+                process->time_remain -= time_used;
                 enqueue(&(readyQueue), process);
-
-            }
-            // Dequeueing and running each process in the Ready Queue until queue is empty
-
-            while(!isEmpty(&readyQueue)){
+                printf("/////////%d time remainign", time_used);
                 
-                struct SystemCall* ready_process = dequeue(&readyQueue);
-                ready_process->state = STATE_RUNNING; 
 
-                total_time += READY_TO_RUNNING;
 
-                // Handling exceeding the time quantum by the process
+                // Dequeueing and running each process in the Ready Queue until queue is empty
 
-                if (ready_process->elapsed_time > timequantum){
-                    total_time += timequantum + RUNNING_TO_READY_TIME;
-                    ready_process->elapsed_time = ready_process->elapsed_time - timequantum;
-                    ready_process->state = STATE_READY;
-                    enqueue(&readyQueue, ready_process);
+                while(!isEmpty(&readyQueue)){
+                
+                    struct SystemCall* ready_process = dequeue(&readyQueue);
+                    if (ready_process->state == STATE_READY){
+                        total_time += READY_TO_RUNNING;
 
-                // handling sleep process
-                }else if(ready_process->sleep > 0){
-                    total_time += ready_process->elapsed_time + RUNNING_TO_BLOCKED_TIME;
-                    ready_process->state = STATE_SLEEPING;
-                    enqueue(&sleepBlockQueue, ready_process);
-                }
+                    }
 
-                // enqueueing all sleep processes 
-                while(!isEmpty(&sleepBlockQueue)){
-                    struct SystemCall* sleep_process = dequeue(&sleepBlockQueue);
-                    total_time += sleep_process->sleep + BLOCKED_TO_READY_TIME;
-                    sleep_process->state = STATE_READY;
-                    enqueue(&readyQueue, sleep_process);
+                    ready_process->state = STATE_RUNNING; 
+
+                    printf("This is the size of the ready q: %d \n",readyQueue.size);
+                    printf("this is the action %s\n", ready_process->action);
+                    printf("time remaining : %d\n", ready_process->time_remain);
+                    printf("\n total time : %d\n", total_time); 
+                    printf("Dequeued process: %s, state: %d\n", ready_process->action, ready_process->state);
+
+                  
+                    // Handling exceeding the time quantum by the process
+                    if (ready_process->time_remain >= timequantum){
+
+                        total_time += RUNNING_TO_READY_TIME+ timequantum;
+                        ready_process->time_remain -= timequantum;
+                        time_used += timequantum;
+
+                        ready_process->state = STATE_READY;
+                        enqueue(&readyQueue, ready_process);
+
+
+
+                    // handling sleep process
+                    }else{
+                         if(ready_process->sleep > 0){
+                            printf("sleep process\n");
+                            total_time += RUNNING_TO_BLOCKED_TIME + ready_process->time_remain;
+                            time_used += ready_process->time_remain;
+                            ready_process->time_remain = 0;
+                            
+                            ready_process->state = STATE_SLEEPING;
+                            enqueue(&sleepBlockQueue, ready_process);
+
+
+                        }else if (strcmp( ready_process->action, "exit") == 0){
+                            total_time += ready_process->time_remain + 1;
+                            ready_process->time_remain = 0;
+                            cpu_time += ready_process->elapsed_time;
+                            ready_process->state = STATE_DONE;
+
+                            break;
+                        }
+                    }
+                     // enqueueing all sleep processes 
+                    while(!isEmpty(&sleepBlockQueue)){
+                        struct SystemCall* sleep_process = dequeue(&sleepBlockQueue);
+                        if (sleep_process->sleep > BLOCKED_TO_READY_TIME){
+                           total_time += sleep_process->sleep;
+
+                       }else{
+                            total_time += BLOCKED_TO_READY_TIME + 2;
+                        }
                     
+                        sleep_process->sleep = 0;
+                        enqueue(&readyQueue, sleep_process);
+                    
+                    }
+                   
+
+
                 }
 
+                
             }
-            
-            
+        
         }
-        printf("total time : %d", total_time);
+            processes_running = false;
+
+
+          
+
 
     }
+            
+    
+
+    int cpu_util = cpu_time/total_time *100;
+    printf("total time : %d \n", total_time);
+    printf("cpu time : %d \n", cpu_time);
+    
 
 
     return 0;
