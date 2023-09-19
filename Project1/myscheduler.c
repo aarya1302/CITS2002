@@ -41,7 +41,7 @@ struct SystemCall {
     char target[32];           // Target (e.g., terminal, hd)
     unsigned int data_size;   // Data size (e.g., 2000B)
     unsigned int sleep; 
-    char spawn_command[32];  
+    char spawned_command[32];  
     unsigned int state;
     unsigned int time_remain;
 };
@@ -237,7 +237,7 @@ void read_cmdfile(char filename[]){
                 commands[current_command_index].calls[call_index].elapsed_time = elapsed_time;
                  commands[current_command_index].calls[call_index].time_remain = elapsed_time;
                 strcpy(commands[current_command_index].calls[call_index].action, action);
-                strcpy(commands[current_command_index].calls[call_index].spawn_command, spawn_command);
+                strcpy(commands[current_command_index].calls[call_index].spawned_command, spawn_command);
             } else if (sscanf(line, "%uusecs %31s", &elapsed_time, action) == 2) {
                 // Handle system calls with no additional parameters
                 size_t call_index = commands[current_command_index].num_calls++;
@@ -278,6 +278,222 @@ void read_cmdfile(char filename[]){
 
 
 }
+// Initialize CPU clock speed and other system parameters
+int clockspeed = 200000000;
+int total_time = 0; 
+int cpu_time = 0; 
+float percentageCPU = 0; 
+
+// Maintain separate queues for different blocked states
+Queue ioBlockQueue, sleepBlockQueue, waitBlockQueue, readyQueue;
+
+struct Command find_command(char name[]){
+
+    struct Command found_cmd;
+
+    for (int i = 0; i < num_cmds; i++){
+
+
+        if(strcmp(commands[i].name, name) == 0){
+            found_cmd = commands[i];
+        }
+        
+    }
+    return found_cmd;
+
+}
+    
+void exec(struct Command curr_command){
+
+    int time_used = 0; 
+
+    printf("///////////////////////// this is the current command : %s", curr_command.name);
+    int num_calls = curr_command.num_calls;
+            //Enqueueing first  processe for  command into the Ready Queue
+    for(int j = 0; j < num_calls; ++j){ 
+
+
+                struct SystemCall* process = &(curr_command.calls[j]);
+                process->time_remain -= time_used;
+                enqueue(&(readyQueue), process);
+
+                
+
+
+                // Dequeueing and running each process in the Ready Queue until queue is empty
+                    int count = 0; 
+                
+                while(!isEmpty(&readyQueue)){
+                
+                    struct SystemCall* ready_process = dequeue(&readyQueue);
+
+
+                    
+
+                    if (ready_process->state == STATE_READY){
+                        total_time += READY_TO_RUNNING;
+                        printf("ready to running time: %d total time %d\n", READY_TO_RUNNING, total_time);
+                        
+
+                    }
+                    ready_process->state = STATE_RUNNING; 
+
+
+
+                    printf("/////////%d time used\n", time_used);
+                    printf("This is the size of the ready q: %d \n",readyQueue.size);
+                    printf("this is the action %s\n", ready_process->action);
+                    printf("time remaining : %d\n", ready_process->time_remain);
+                    printf("total time : %d <------ \n", total_time); 
+
+                    if(ready_process->time_remain <= 0){
+                        printf("exiting process done////////////\n");
+                        
+                        
+                    }
+
+                    // calculating the time 
+                    if(ready_process->time_remain > 0){
+                         if (ready_process->time_remain >= timeQ){
+
+
+                            total_time += RUNNING_TO_READY_TIME+ timeQ;
+                            ready_process->time_remain -= timeQ;
+                            time_used += timeQ;
+                            printf("time q exceeded+ Running to ready time %d + TQ : %d total time \n",RUNNING_TO_READY_TIME,  total_time);
+
+                            ready_process->state = STATE_READY;
+                            enqueue(&readyQueue, ready_process);
+
+
+
+                        // handling sleep process
+                        } else { 
+                            total_time += ready_process->time_remain ;
+                            time_used += ready_process->time_remain ;
+                            ready_process->time_remain = 0;
+                            printf("time q exceeded+ Running to ready time %d + TQ : %d total time \n",RUNNING_TO_READY_TIME,  total_time);
+
+                            enqueue(&readyQueue, ready_process);
+
+                        }
+                    }
+                    
+                    // Executing actions
+                    
+                    if(ready_process->time_remain == 0 && ready_process->state == STATE_RUNNING){
+                        if (strcmp( ready_process->action, "exit") == 0){ 
+                            
+
+                            total_time += ready_process->time_remain + 1;
+                            ready_process->time_remain = 0;
+                            cpu_time += ready_process->elapsed_time;
+                            ready_process->state = STATE_DONE;
+                            printf("exiting process; %dtime remaining + 1 : %d total time \n",ready_process->time_remain, total_time);
+
+                            break;
+                        }else{
+                         if(ready_process->sleep > 0){
+
+
+                            total_time += RUNNING_TO_BLOCKED_TIME + ready_process->time_remain + 1;
+
+                            time_used += ready_process->time_remain;
+                            printf("sleep process %d time remain + %d running blocked: %d total time \n",ready_process->time_remain, RUNNING_TO_BLOCKED_TIME, total_time);
+
+
+                            ready_process->time_remain = 0;
+                            
+                            ready_process->state = STATE_SLEEPING;
+
+                            enqueue(&sleepBlockQueue, ready_process);
+                            printf("sleep queue size : %d \n", sleepBlockQueue.size);
+
+
+                        }else if (strcmp( ready_process->action, "spawn") == 0) {
+
+                            struct Command spawned = find_command(ready_process->spawned_command);
+
+                            total_time += ready_process->time_remain + RUNNING_TO_READY_TIME;
+
+                            time_used += ready_process->time_remain;
+                            printf("%d spawned process before exec + %d running to ready time: %d total time \n",ready_process->time_remain, RUNNING_TO_READY_TIME, total_time);
+
+
+                            ready_process->time_remain = 0;
+                            exec(spawned);
+                            printf("spawned process after exec : %d total time \n", total_time);
+
+
+
+
+                        }else if (strcmp(ready_process->action, "wait") == 0){
+
+
+
+                            total_time += RUNNING_TO_BLOCKED_TIME + ready_process->time_remain;
+
+                            time_used += ready_process->time_remain;
+
+
+                            printf("%d wait process before exec + %d running to blocked time: %d total time \n",ready_process->time_remain, RUNNING_TO_BLOCKED_TIME, total_time);
+
+                            ready_process->time_remain = 0;
+                            
+                            ready_process->state = STATE_BLOCKED_WAIT;
+                            enqueue(&waitBlockQueue, ready_process);
+                          
+
+                        }
+                         
+
+    
+                        
+                        }   
+
+                    }
+
+                        if((!isEmpty(&sleepBlockQueue)) == 1){
+
+                            struct SystemCall* sleep_process = dequeue(&sleepBlockQueue);
+                            if (sleep_process->sleep > BLOCKED_TO_READY_TIME){
+                                total_time += sleep_process->sleep;
+                                printf("%d sleep process; %d total time \n",ready_process->sleep,total_time);
+
+                            }else{
+                                    total_time += BLOCKED_TO_READY_TIME + 1;
+                                    printf("%d sleep process; %d total time \n", BLOCKED_TO_READY_TIME, total_time);
+                            }
+                    
+                            sleep_process->sleep = 0;
+                            enqueue(&readyQueue, sleep_process);
+                    
+                        }
+                        if(!isEmpty(&waitBlockQueue)){
+                             struct SystemCall* wait_process = dequeue(&waitBlockQueue);
+
+                            total_time += BLOCKED_TO_READY_TIME + 1;
+                            printf("wait blocked process:+= %d blocked to ready time: %d  + 1 total time \n", BLOCKED_TO_READY_TIME, total_time);
+
+                            enqueue(&readyQueue, wait_process);
+                    
+                        }   
+                    
+                    
+
+                 // enqueueing all sleep processes 
+                    
+
+                   
+
+
+                }
+                
+
+                
+            }
+        
+}
 
 
 int main(int argc, char *argv[]) {
@@ -290,15 +506,7 @@ int main(int argc, char *argv[]) {
     read_sysconfig(argv[1]);
     read_cmdfile(argv[2]);
     
-     // Initialize CPU clock speed and other system parameters
-    int clockspeed = 200000000;
-    int timequantum = timeQ; 
-    int total_time = 0; 
-    int cpu_time = 0; 
-    float percentageCPU = 0; 
-
-    // Maintain separate queues for different blocked states
-    Queue ioBlockQueue, sleepBlockQueue, waitBlockQueue, readyQueue;
+    // initializing the queues
     initQueue(&ioBlockQueue);
     initQueue(&sleepBlockQueue);
     initQueue(&waitBlockQueue);
@@ -306,103 +514,15 @@ int main(int argc, char *argv[]) {
 
     bool processes_running = true;
 
+   
+    
+
     while (processes_running) {
         processes_running = false;
-
-        for(int i = 0; i < num_cmds; ++i){
-
-            struct Command curr_command = commands[i];
-            int time_used = 0; 
-
-            printf("///////////////////////// this is the current command : %s", curr_command.name);
-             int num_calls = commands[i].num_calls;
-            //Enqueueing first  processe for  command into the Ready Queue
-            for(int j = 0; j < num_calls; ++j){ 
-
-
-                struct SystemCall* process = &(curr_command.calls[j]);
-                process->time_remain -= time_used;
-                enqueue(&(readyQueue), process);
-                printf("/////////%d time remainign", time_used);
-                
-
-
-                // Dequeueing and running each process in the Ready Queue until queue is empty
-
-                while(!isEmpty(&readyQueue)){
-                
-                    struct SystemCall* ready_process = dequeue(&readyQueue);
-                    if (ready_process->state == STATE_READY){
-                        total_time += READY_TO_RUNNING;
-
-                    }
-
-                    ready_process->state = STATE_RUNNING; 
-
-                    printf("This is the size of the ready q: %d \n",readyQueue.size);
-                    printf("this is the action %s\n", ready_process->action);
-                    printf("time remaining : %d\n", ready_process->time_remain);
-                    printf("\n total time : %d\n", total_time); 
-                    printf("Dequeued process: %s, state: %d\n", ready_process->action, ready_process->state);
-
-                  
-                    // Handling exceeding the time quantum by the process
-                    if (ready_process->time_remain >= timequantum){
-
-                        total_time += RUNNING_TO_READY_TIME+ timequantum;
-                        ready_process->time_remain -= timequantum;
-                        time_used += timequantum;
-
-                        ready_process->state = STATE_READY;
-                        enqueue(&readyQueue, ready_process);
-
-
-
-                    // handling sleep process
-                    }else{
-                         if(ready_process->sleep > 0){
-                            printf("sleep process\n");
-                            total_time += RUNNING_TO_BLOCKED_TIME + ready_process->time_remain;
-                            time_used += ready_process->time_remain;
-                            ready_process->time_remain = 0;
-                            
-                            ready_process->state = STATE_SLEEPING;
-                            enqueue(&sleepBlockQueue, ready_process);
-
-
-                        }else if (strcmp( ready_process->action, "exit") == 0){
-                            total_time += ready_process->time_remain + 1;
-                            ready_process->time_remain = 0;
-                            cpu_time += ready_process->elapsed_time;
-                            ready_process->state = STATE_DONE;
-
-                            break;
-                        }
-                    }
-                     // enqueueing all sleep processes 
-                    while(!isEmpty(&sleepBlockQueue)){
-                        struct SystemCall* sleep_process = dequeue(&sleepBlockQueue);
-                        if (sleep_process->sleep > BLOCKED_TO_READY_TIME){
-                           total_time += sleep_process->sleep;
-
-                       }else{
-                            total_time += BLOCKED_TO_READY_TIME + 2;
-                        }
-                    
-                        sleep_process->sleep = 0;
-                        enqueue(&readyQueue, sleep_process);
-                    
-                    }
-                   
-
-
-                }
-
-                
-            }
         
-        }
-            processes_running = false;
+
+        exec(commands[0]);
+        
 
 
           

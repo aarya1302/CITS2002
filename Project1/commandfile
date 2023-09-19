@@ -1,10 +1,17 @@
+shell
+	10usecs   sleep   10usec
+	25usecs   spawn   cal
+		27usecs   wait
+	30usecs   spawn   shortsleep
+	35usecs   wait
+	40usecs  exit
 #
-longsleep
-	10usecs    sleep   10usecs
-	20usecs    exit
 #
+cal
+	10usecs    sleep   10usec
+	15usecs    exit
 #
 shortsleep
-	10usecs    sleep   10usecs
-	20usecs    exit
+	10usecs    sleep   10usec
+	15usecs    exit
 #
