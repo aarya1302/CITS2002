@@ -328,8 +328,6 @@ void exec(struct Command curr_command){
                     struct SystemCall* ready_process = dequeue(&readyQueue);
 
 
-                    
-
                     if (ready_process->state == STATE_READY){
                         total_time += READY_TO_RUNNING;
                         printf("ready to running time: %d total time %d\n", READY_TO_RUNNING, total_time);
@@ -345,18 +343,14 @@ void exec(struct Command curr_command){
                     printf("this is the action %s\n", ready_process->action);
                     printf("time remaining : %d\n", ready_process->time_remain);
                     printf("total time : %d <------ \n", total_time); 
-
-                    if(ready_process->time_remain <= 0){
-                        printf("exiting process done////////////\n");
-                        
-                        
-                    }
+                    printf("state of process %d\n", ready_process->state);
+                    printf("this is timeQ %ld \n", timeQ);
 
                     // calculating the time 
+
                     if(ready_process->time_remain > 0){
                          if (ready_process->time_remain >= timeQ){
-
-
+                            printf("TIME Q BEING EXCEEDED  \n");
                             total_time += RUNNING_TO_READY_TIME+ timeQ;
                             ready_process->time_remain -= timeQ;
                             time_used += timeQ;
@@ -366,29 +360,25 @@ void exec(struct Command curr_command){
                             enqueue(&readyQueue, ready_process);
 
 
-
-                        // handling sleep process
                         } else { 
                             total_time += ready_process->time_remain ;
                             time_used += ready_process->time_remain ;
                             ready_process->time_remain = 0;
-                            printf("time q exceeded+ Running to ready time %d + TQ : %d total time \n",RUNNING_TO_READY_TIME,  total_time);
-
-                            enqueue(&readyQueue, ready_process);
+                            printf("exec of process %d; total time %d  \n", ready_process->time_remain,  total_time);
 
                         }
                     }
                     
                     // Executing actions
                     
-                    if(ready_process->time_remain == 0 && ready_process->state == STATE_RUNNING){
+                    if(ready_process->time_remain <= 0 && ready_process->state == STATE_RUNNING){
                         if (strcmp( ready_process->action, "exit") == 0){ 
                             
 
                             total_time += ready_process->time_remain + 1;
                             ready_process->time_remain = 0;
                             cpu_time += ready_process->elapsed_time;
-                            ready_process->state = STATE_DONE;
+
                             printf("exiting process; %dtime remaining + 1 : %d total time \n",ready_process->time_remain, total_time);
 
                             break;
@@ -396,13 +386,10 @@ void exec(struct Command curr_command){
                          if(ready_process->sleep > 0){
 
 
-                            total_time += RUNNING_TO_BLOCKED_TIME + ready_process->time_remain + 1;
+                            total_time += RUNNING_TO_BLOCKED_TIME + 1;
 
                             time_used += ready_process->time_remain;
                             printf("sleep process %d time remain + %d running blocked: %d total time \n",ready_process->time_remain, RUNNING_TO_BLOCKED_TIME, total_time);
-
-
-                            ready_process->time_remain = 0;
                             
                             ready_process->state = STATE_SLEEPING;
 
@@ -414,16 +401,15 @@ void exec(struct Command curr_command){
 
                             struct Command spawned = find_command(ready_process->spawned_command);
 
-                            total_time += ready_process->time_remain + RUNNING_TO_READY_TIME;
+                            total_time += RUNNING_TO_READY_TIME ;
 
-                            time_used += ready_process->time_remain;
                             printf("%d spawned process before exec + %d running to ready time: %d total time \n",ready_process->time_remain, RUNNING_TO_READY_TIME, total_time);
 
 
                             ready_process->time_remain = 0;
+
                             exec(spawned);
                             printf("spawned process after exec : %d total time \n", total_time);
-
 
 
 
@@ -431,18 +417,15 @@ void exec(struct Command curr_command){
 
 
 
-                            total_time += RUNNING_TO_BLOCKED_TIME + ready_process->time_remain;
-
-                            time_used += ready_process->time_remain;
+                            total_time += RUNNING_TO_BLOCKED_TIME + 1;
 
 
                             printf("%d wait process before exec + %d running to blocked time: %d total time \n",ready_process->time_remain, RUNNING_TO_BLOCKED_TIME, total_time);
 
-                            ready_process->time_remain = 0;
                             
                             ready_process->state = STATE_BLOCKED_WAIT;
                             enqueue(&waitBlockQueue, ready_process);
-                          
+                            
 
                         }
                          
@@ -452,6 +435,8 @@ void exec(struct Command curr_command){
                         }   
 
                     }
+
+
 
                         if((!isEmpty(&sleepBlockQueue)) == 1){
 
@@ -464,27 +449,23 @@ void exec(struct Command curr_command){
                                     total_time += BLOCKED_TO_READY_TIME + 1;
                                     printf("%d sleep process; %d total time \n", BLOCKED_TO_READY_TIME, total_time);
                             }
+                            sleep_process->state = STATE_DONE;
                     
                             sleep_process->sleep = 0;
-                            enqueue(&readyQueue, sleep_process);
+
                     
                         }
                         if(!isEmpty(&waitBlockQueue)){
                              struct SystemCall* wait_process = dequeue(&waitBlockQueue);
+                            wait_process->state = STATE_READY;
 
-                            total_time += BLOCKED_TO_READY_TIME + 1;
+                            total_time += BLOCKED_TO_READY_TIME;
                             printf("wait blocked process:+= %d blocked to ready time: %d  + 1 total time \n", BLOCKED_TO_READY_TIME, total_time);
 
-                            enqueue(&readyQueue, wait_process);
+
+                            
                     
                         }   
-                    
-                    
-
-                 // enqueueing all sleep processes 
-                    
-
-                   
 
 
                 }
