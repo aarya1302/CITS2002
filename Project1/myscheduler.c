@@ -33,7 +33,7 @@ struct DeviceInfo {
 
 long timeQ; // time quantum global variable
 long num_cmds; // number of commands
-
+int numDevices; 
 // Define a data structure to represent a system call
 struct SystemCall {
     unsigned int elapsed_time; // Elapsed time in microseconds
@@ -132,7 +132,7 @@ void read_sysconfig(char filename[]){
     }
 
     char line[256];
-    int numDevices = 0;
+
 
     // Count the number of devices in the file (excluding comment lines)
     while (fgets(line, sizeof(line), file) != NULL) {
@@ -302,6 +302,20 @@ struct Command find_command(char name[]){
     return found_cmd;
 
 }
+struct DeviceInfo find_device(char name[]){
+
+    struct DeviceInfo found_device;
+
+    for (int i = 0; i < numDevices; i++){
+        printf("one device is : %s\n",devices[i].devicename);
+        if(strcmp(devices[i].devicename, name) == 0){
+            found_device = devices[i];
+        }
+        
+    }
+    return found_device;
+
+}
     
 void exec(struct Command curr_command){
 
@@ -375,7 +389,7 @@ void exec(struct Command curr_command){
                         if (strcmp( ready_process->action, "exit") == 0){ 
                             
 
-                            total_time += ready_process->time_remain + 1;
+                            total_time += ready_process->time_remain;
                             ready_process->time_remain = 0;
                             cpu_time += ready_process->elapsed_time;
 
@@ -400,10 +414,7 @@ void exec(struct Command curr_command){
                         }else if (strcmp( ready_process->action, "spawn") == 0) {
 
                             struct Command spawned = find_command(ready_process->spawned_command);
-
                             total_time += RUNNING_TO_READY_TIME ;
-
-                            printf("%d spawned process before exec + %d running to ready time: %d total time \n",ready_process->time_remain, RUNNING_TO_READY_TIME, total_time);
 
 
                             ready_process->time_remain = 0;
@@ -417,7 +428,7 @@ void exec(struct Command curr_command){
 
 
 
-                            total_time += RUNNING_TO_BLOCKED_TIME + 1;
+                            total_time += RUNNING_TO_BLOCKED_TIME;
 
 
                             printf("%d wait process before exec + %d running to blocked time: %d total time \n",ready_process->time_remain, RUNNING_TO_BLOCKED_TIME, total_time);
@@ -425,6 +436,20 @@ void exec(struct Command curr_command){
                             
                             ready_process->state = STATE_BLOCKED_WAIT;
                             enqueue(&waitBlockQueue, ready_process);
+                            
+
+                        }else if (strcmp(ready_process->action, "write") == 0 || strcmp(ready_process->action, "write") == 0){
+
+
+
+                            total_time += RUNNING_TO_BLOCKED_TIME + 1;
+
+
+                            printf("%d read process after exec + %d running to blocked time: %d total time \n",ready_process->time_remain, RUNNING_TO_BLOCKED_TIME, total_time);
+
+                            
+                            ready_process->state = STATE_BLOCKED_WAIT;
+                            enqueue(&ioBlockQueue, ready_process);
                             
 
                         }
@@ -461,11 +486,28 @@ void exec(struct Command curr_command){
 
                             total_time += BLOCKED_TO_READY_TIME;
                             printf("wait blocked process:+= %d blocked to ready time: %d  + 1 total time \n", BLOCKED_TO_READY_TIME, total_time);
-
-
                             
                     
-                        }   
+                        }if(!isEmpty(&ioBlockQueue)){
+                             struct SystemCall* io_process = dequeue(&ioBlockQueue);
+                             struct DeviceInfo device = find_device(io_process->target);
+                             printf("this is the device name %s and this is data size %d and write speed %lld \n", device.devicename,io_process->data_size, device.writespeed);
+                             double data_size = io_process->data_size;
+                             double speed;
+                             if(strcmp(io_process->action, "write") == 0 ){
+                                speed = device.writespeed;
+                             }else{
+                                 speed = device.readspeed; 
+                             }
+                             double wait_time = data_size/speed * 1000000;
+                             printf("wait time :%f \n ", wait_time);
+                            io_process->state = STATE_READY;
+
+                            total_time += BLOCKED_TO_READY_TIME + wait_time + DATA_BUS_ACQUIRE_TIME;
+                            printf("io blocked process:+= %d blocked to ready time + %f wait io time: %d  + 1 total time + data bus time \n", BLOCKED_TO_READY_TIME, wait_time,  total_time);
+                            
+                    
+                        }    
 
 
                 }

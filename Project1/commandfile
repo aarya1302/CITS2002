@@ -1,12 +1,5 @@
-shell
-	25usecs   spawn   cal
-		27usecs   wait
-	30usecs   spawn   cal
-		35usecs   wait
-	40usecs  exit
-#
 #
 cal
-	10usecs    sleep   10usec
-	15usecs    exit
+	80usecs    write   terminal 200B
+	90usecs    exit
 #
