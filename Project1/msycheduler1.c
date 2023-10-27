@@ -237,7 +237,7 @@ void read_commands( char filename[]){
 
 
 
-
+            size_t call_index = commands[current_command_index].num_calls;
 
 
 
@@ -321,7 +321,7 @@ void execute_commands(struct Command curr_command)
                 enqueue(&(readyQueue), process);
 
                 // Dequeueing and running each process in the Ready Queue until queue is empty
- 
+                    int count = 0; 
                 
                 while(!isEmpty(&readyQueue)){
                 
@@ -498,7 +498,7 @@ int main(int argc, char *argv[])
 
 //  EXECUTE COMMANDS, STARTING AT FIRST IN command-file, UNTIL NONE REMAIN
     execute_commands(commands[0]);
-
+    double cpu = cpu_time;
 
     int percentage = ((float)cpu_time / total_time) * 100;
 
