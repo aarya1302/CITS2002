@@ -3,6 +3,7 @@
         "__locale": "c",
         "files.h": "c",
         "mysync.h": "c",
-        "variant": "c"
+        "variant": "c",
+        "types.h": "c"
     }
 }

@@ -1,0 +1,1 @@
+bool matches_pattern(const char *filename, regex_t* regex_patterns, int num_patterns);
